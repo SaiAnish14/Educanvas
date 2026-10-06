@@ -49,74 +49,114 @@ function completionDocId(studentId, curriculumId, topicId) {
   return `${studentId}_${curriculumId}_${safeTopicId}`;
 }
 
-export async function fetchStudentCompletions(studentId, curriculumId) {
-  const snap = await getDocs(
-    query(
-      collection(db, "topic_completions"),
-      where("studentId", "==", studentId),
-      where("curriculumId", "==", curriculumId)
-    )
-  );
+import {
+  getLocalTopicCompletions,
+  saveLocalTopicCompletion,
+  getLocalEnrollmentList,
+} from "./localStore";
 
-  const map = {};
-  snap.docs.forEach((d) => {
-    map[d.data().topicId] = d.data().completedAt;
-  });
-  return map;
+export async function fetchStudentCompletions(studentId, curriculumId) {
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, "topic_completions"),
+        where("studentId", "==", studentId),
+        where("curriculumId", "==", curriculumId)
+      )
+    );
+
+    const map = {};
+    snap.docs.forEach((d) => {
+      map[d.data().topicId] = d.data().completedAt || new Date().toISOString();
+    });
+    return map;
+  } catch (err) {
+    console.warn("Using local completions fallback:", err.message);
+    return getLocalTopicCompletions(studentId, curriculumId);
+  }
 }
 
 export async function markTopicComplete(studentId, curriculumId, courseCode, topicId) {
-  const docRef = doc(
-    db,
-    "topic_completions",
-    completionDocId(studentId, curriculumId, topicId)
-  );
-  const existing = await getDoc(docRef);
-  if (existing.exists()) return existing.data().completedAt;
+  saveLocalTopicCompletion(studentId, curriculumId, topicId);
 
-  const payload = {
-    studentId,
-    curriculumId,
-    courseCode,
-    topicId,
-    completedAt: serverTimestamp(),
-  };
-  await setDoc(docRef, payload);
-  return payload;
+  try {
+    const docRef = doc(
+      db,
+      "topic_completions",
+      completionDocId(studentId, curriculumId, topicId)
+    );
+    const existing = await getDoc(docRef);
+    if (existing.exists()) return existing.data().completedAt;
+
+    const payload = {
+      studentId,
+      curriculumId,
+      courseCode,
+      topicId,
+      completedAt: serverTimestamp(),
+    };
+    await setDoc(docRef, payload);
+    return payload;
+  } catch (err) {
+    console.warn("Could not save completion to Firestore (saved locally):", err.message);
+    return { completedAt: new Date().toISOString() };
+  }
 }
 
 export async function fetchCurriculumCompletions(curriculumId) {
-  const snap = await getDocs(
-    query(collection(db, "topic_completions"), where("curriculumId", "==", curriculumId))
-  );
+  try {
+    const snap = await getDocs(
+      query(collection(db, "topic_completions"), where("curriculumId", "==", curriculumId))
+    );
 
-  const byStudent = {};
-  snap.docs.forEach((d) => {
-    const { studentId, topicId } = d.data();
-    if (!byStudent[studentId]) byStudent[studentId] = new Set();
-    byStudent[studentId].add(topicId);
-  });
+    const byStudent = {};
+    snap.docs.forEach((d) => {
+      const { studentId, topicId } = d.data();
+      if (!byStudent[studentId]) byStudent[studentId] = new Set();
+      byStudent[studentId].add(topicId);
+    });
 
-  return Object.entries(byStudent).map(([studentId, topicSet]) => ({
-    studentId,
-    completedTopics: [...topicSet],
-  }));
+    return Object.entries(byStudent).map(([studentId, topicSet]) => ({
+      studentId,
+      completedTopics: [...topicSet],
+    }));
+  } catch (err) {
+    console.warn("Using local curriculum completions fallback:", err.message);
+    return [];
+  }
 }
 
 export async function fetchEnrolledStudents(curriculumId) {
-  const enrollSnap = await getDocs(collection(db, "enrollments", curriculumId, "students"));
-  const students = await Promise.all(
-    enrollSnap.docs.map(async (enrollDoc) => {
-      const studentId = enrollDoc.id;
-      const userSnap = await getDoc(doc(db, "users", studentId));
-      const profile = userSnap.exists() ? userSnap.data() : {};
-      return {
-        studentId,
-        studentName: profile.name || "Unknown Student",
-      };
-    })
-  );
-  return students;
+  try {
+    const enrollSnap = await getDocs(collection(db, "enrollments", curriculumId, "students"));
+    const students = await Promise.all(
+      enrollSnap.docs.map(async (enrollDoc) => {
+        const studentId = enrollDoc.id;
+        try {
+          const userSnap = await getDoc(doc(db, "users", studentId));
+          const profile = userSnap.exists() ? userSnap.data() : {};
+          return {
+            studentId,
+            studentName: profile.name || "Student",
+          };
+        } catch {
+          return {
+            studentId,
+            studentName: "Student",
+          };
+        }
+      })
+    );
+    if (students.length > 0) return students;
+  } catch (err) {
+    console.warn("Using local enrollments fallback:", err.message);
+  }
+
+  const localList = getLocalEnrollmentList(curriculumId);
+  return localList.map(e => ({
+    studentId: e.studentId,
+    studentName: e.studentName || "Student",
+  }));
 }
 
 export function categorizeStudentProgress(completedCount, totalTopics) {

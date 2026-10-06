@@ -7,6 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
 import StatCard from "../shared/StatCard";
 import { getActiveCurriculaCount } from "../../utils/statsApi";
+import { getLocalCurricula, getLocalEnrollmentList, getLocalHistory } from "../../utils/localStore";
 
 export default function Analytics() {
   const { currentUser, userProfile } = useAuth();
@@ -35,63 +36,86 @@ export default function Analytics() {
     if (!currentUser) return;
 
     async function load() {
-      const curriculaSnap = await getDocs(
-        query(
-          collection(db, "curricula"),
-          where("teacherId", "==", currentUser.uid),
-          where("isPublished", "==", true)
-        )
-      );
+      try {
+        const curriculaSnap = await getDocs(
+          query(
+            collection(db, "curricula"),
+            where("teacherId", "==", currentUser.uid),
+            where("isPublished", "==", true)
+          )
+        );
 
-      const curricula = curriculaSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      let totalEnrollments = 0;
-      let maxEnroll = 0;
-      let popularTitle = "—";
+        let curricula = curriculaSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (curricula.length === 0) {
+          curricula = getLocalCurricula({ teacherId: currentUser.uid, isPublished: true });
+        }
 
-      const chartData = await Promise.all(
-        curricula.map(async (c) => {
-          const enrollSnap = await getDocs(
-            collection(db, "enrollments", c.id, "students")
+        let totalEnrollments = 0;
+        let maxEnroll = 0;
+        let popularTitle = "—";
+
+        const chartData = await Promise.all(
+          curricula.map(async (c) => {
+            let count = 0;
+            try {
+              const enrollSnap = await getDocs(
+                collection(db, "enrollments", c.id, "students")
+              );
+              count = enrollSnap.size;
+            } catch {
+              count = getLocalEnrollmentList(c.id).length;
+            }
+            totalEnrollments += count;
+            if (count > maxEnroll) {
+              maxEnroll = count;
+              popularTitle = c.title;
+            }
+            return {
+              name: c.title.length > 20 ? c.title.substring(0, 20) + "…" : c.title,
+              count,
+            };
+          })
+        );
+
+        let recent = [];
+        try {
+          const historySnap = await getDocs(
+            query(
+              collection(db, "teacherHistory", currentUser.uid, "entries"),
+              orderBy("timestamp", "desc"),
+              limit(5)
+            )
           );
-          const count = enrollSnap.size;
-          totalEnrollments += count;
-          if (count > maxEnroll) {
-            maxEnroll = count;
-            popularTitle = c.title;
-          }
-          return {
-            name: c.title.length > 20 ? c.title.substring(0, 20) + "…" : c.title,
-            count,
-          };
-        })
-      );
+          recent = historySnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch {
+          recent = getLocalHistory("teacher", currentUser.uid).slice(0, 5);
+        }
 
-      const historySnap = await getDocs(
-        query(
-          collection(db, "teacherHistory", currentUser.uid, "entries"),
-          orderBy("timestamp", "desc"),
-          limit(5)
-        )
-      );
-
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const allHistorySnap = await getDocs(
-        collection(db, "teacherHistory", currentUser.uid, "entries")
-      );
-      const monthActivity = allHistorySnap.docs.filter((d) => {
-        const ts = d.data().timestamp?.toDate?.();
-        return ts && ts >= monthStart;
-      }).length;
-
-      setStats({
-        totalPosted: curricula.length,
-        totalEnrollments,
-        popularTitle,
-        monthActivity,
-      });
-      setEnrollmentData(chartData);
-      setRecentActivity(historySnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setStats({
+          totalPosted: curricula.length,
+          totalEnrollments,
+          popularTitle,
+          monthActivity: recent.length,
+        });
+        setEnrollmentData(chartData);
+        setRecentActivity(recent);
+      } catch (err) {
+        console.warn("Using localStore for Analytics:", err.message);
+        const curricula = getLocalCurricula({ teacherId: currentUser.uid, isPublished: true });
+        const chartData = curricula.map((c) => ({
+          name: c.title.length > 20 ? c.title.substring(0, 20) + "…" : c.title,
+          count: getLocalEnrollmentList(c.id).length,
+        }));
+        const recent = getLocalHistory("teacher", currentUser.uid).slice(0, 5);
+        setStats({
+          totalPosted: curricula.length,
+          totalEnrollments: chartData.reduce((s, i) => s + i.count, 0),
+          popularTitle: curricula[0]?.title || "—",
+          monthActivity: recent.length,
+        });
+        setEnrollmentData(chartData);
+        setRecentActivity(recent);
+      }
     }
 
     load();

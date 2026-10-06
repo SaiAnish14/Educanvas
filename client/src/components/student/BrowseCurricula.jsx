@@ -4,6 +4,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { Users } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
+import { getLocalCurricula, getLocalEnrollmentList } from "../../utils/localStore";
 
 export default function BrowseCurricula() {
   const { currentUser, userProfile } = useAuth();
@@ -20,26 +21,44 @@ export default function BrowseCurricula() {
 
   async function loadCurricula() {
     setLoading(true);
-    const snap = await getDocs(
-      query(
-        collection(db, "curricula"),
-        where("college", "==", userProfile.college),
-        where("isPublished", "==", true)
-      )
-    );
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "curricula"),
+          where("college", "==", userProfile?.college || "Global University"),
+          where("isPublished", "==", true)
+        )
+      );
 
-    const items = await Promise.all(
-      snap.docs.map(async (d) => {
-        const data = { id: d.id, ...d.data() };
-        const enrollSnap = await getDocs(
-          collection(db, "enrollments", d.id, "students")
-        );
-        return { ...data, enrollmentCount: enrollSnap.size };
-      })
-    );
+      const items = await Promise.all(
+        snap.docs.map(async (d) => {
+          const data = { id: d.id, ...d.data() };
+          let enrollmentCount = 0;
+          try {
+            const enrollSnap = await getDocs(
+              collection(db, "enrollments", d.id, "students")
+            );
+            enrollmentCount = enrollSnap.size;
+          } catch {
+            enrollmentCount = getLocalEnrollmentList(d.id).length;
+          }
+          return { ...data, enrollmentCount };
+        })
+      );
 
-    setCurricula(items);
-    setLoading(false);
+      if (items.length > 0) {
+        setCurricula(items);
+      } else {
+        const localItems = getLocalCurricula({ isPublished: true });
+        setCurricula(localItems.map(c => ({ ...c, enrollmentCount: getLocalEnrollmentList(c.id).length })));
+      }
+    } catch (err) {
+      console.warn("Using localStore for BrowseCurricula:", err.message);
+      const localItems = getLocalCurricula({ isPublished: true });
+      setCurricula(localItems.map(c => ({ ...c, enrollmentCount: getLocalEnrollmentList(c.id).length })));
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filtered = curricula.filter((c) => {

@@ -4,6 +4,7 @@ import { FileDown, FileText } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
 import { downloadCurriculumPDF } from "../../utils/generatePDF";
+import { getLocalCurricula } from "../../utils/localStore";
 
 export default function Resources() {
   const { currentUser, userProfile } = useAuth();
@@ -14,15 +15,26 @@ export default function Resources() {
     if (!currentUser) return;
 
     async function load() {
-      const snap = await getDocs(
-        query(
-          collection(db, "curricula"),
-          where("teacherId", "==", currentUser.uid),
-          where("isPublished", "==", true)
-        )
-      );
-      setCurricula(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "curricula"),
+            where("teacherId", "==", currentUser.uid),
+            where("isPublished", "==", true)
+          )
+        );
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (docs.length > 0) {
+          setCurricula(docs);
+        } else {
+          setCurricula(getLocalCurricula({ teacherId: currentUser.uid, isPublished: true }));
+        }
+      } catch (err) {
+        console.warn("Using localStore for Resources:", err.message);
+        setCurricula(getLocalCurricula({ teacherId: currentUser.uid, isPublished: true }));
+      } finally {
+        setLoading(false);
+      }
     }
 
     load();

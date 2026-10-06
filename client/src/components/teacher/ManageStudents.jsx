@@ -3,6 +3,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { GraduationCap } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
+import { getLocalCurricula } from "../../utils/localStore";
 import StudentProgressPanel from "./StudentProgressPanel";
 
 export default function ManageStudents() {
@@ -14,15 +15,26 @@ export default function ManageStudents() {
     if (!currentUser) return;
 
     async function load() {
-      const snap = await getDocs(
-        query(
-          collection(db, "curricula"),
-          where("teacherId", "==", currentUser.uid),
-          where("isPublished", "==", true)
-        )
-      );
-      setCurricula(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "curricula"),
+            where("teacherId", "==", currentUser.uid),
+            where("isPublished", "==", true)
+          )
+        );
+        const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (docs.length > 0) {
+          setCurricula(docs);
+        } else {
+          setCurricula(getLocalCurricula({ teacherId: currentUser.uid, isPublished: true }));
+        }
+      } catch (err) {
+        console.warn("Using localStore for ManageStudents:", err.message);
+        setCurricula(getLocalCurricula({ teacherId: currentUser.uid, isPublished: true }));
+      } finally {
+        setLoading(false);
+      }
     }
 
     load();

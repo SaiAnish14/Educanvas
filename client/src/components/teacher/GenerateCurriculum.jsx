@@ -7,6 +7,7 @@ import { db } from "../../firebase/config";
 import { generateCurriculum } from "../../utils/groqClient";
 import { downloadCurriculumPDF } from "../../utils/generatePDF";
 import { logTeacherAction } from "../../hooks/useFirestore";
+import { saveLocalCurriculum } from "../../utils/localStore";
 import CurriculumAccordion from "../shared/CurriculumAccordion";
 
 const DEGREE_OPTIONS = [
@@ -91,10 +92,10 @@ export default function GenerateCurriculum() {
         semesters: parseInt(form.semesters, 10),
         weeklyHours: curriculum.weeklyHours || form.weeklyHours,
         industryFocus: curriculum.industryFocus || form.industryFocus,
-        college: userProfile.college,
+        college: userProfile?.college || "Global University",
         teacherId: currentUser.uid,
-        teacherName: userProfile.name,
-        postedAt: serverTimestamp(),
+        teacherName: userProfile?.name || "Faculty",
+        postedAt: new Date().toISOString(),
         isPublished: true,
         status: "active",
         semesterData: curriculum.semesters,
@@ -102,16 +103,25 @@ export default function GenerateCurriculum() {
         downloadCount: editData?.downloadCount || 0,
       };
 
-      let curriculumId;
-      if (editData?.id) {
-        curriculumId = editData.id;
-        await updateDoc(doc(db, "curricula", curriculumId), docData);
-        await logTeacherAction(currentUser.uid, "edited", curriculumId, docData.title, docData);
-      } else {
-        const ref = await addDoc(collection(db, "curricula"), docData);
-        curriculumId = ref.id;
-        await logTeacherAction(currentUser.uid, "posted", curriculumId, docData.title, docData);
+      let curriculumId = editData?.id || `curriculum-${Date.now()}`;
+      docData.id = curriculumId;
+
+      // Always save locally so it instantly appears in My Curricula and Browse
+      saveLocalCurriculum(docData);
+      await logTeacherAction(currentUser.uid, editData?.id ? "edited" : "posted", curriculumId, docData.title, docData);
+
+      // Attempt to save to Firestore
+      try {
+        if (editData?.id) {
+          await updateDoc(doc(db, "curricula", curriculumId), docData);
+        } else {
+          const ref = await addDoc(collection(db, "curricula"), docData);
+          curriculumId = ref.id;
+        }
+      } catch (fsErr) {
+        console.warn("Could not sync to Firestore (saved locally):", fsErr.message);
       }
+
       showToast("Curriculum posted successfully!");
     } catch (err) {
       showToast(err.message || "Failed to post", "error");

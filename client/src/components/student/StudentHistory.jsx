@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
+import { getLocalHistory } from "../../utils/localStore";
 
 const actionColors = {
   viewed: "bg-blue-100 text-blue-700",
@@ -25,14 +26,25 @@ export default function StudentHistory() {
 
   async function loadHistory() {
     setLoading(true);
-    const snap = await getDocs(
-      query(
-        collection(db, "studentHistory", currentUser.uid, "entries"),
-        orderBy("timestamp", "desc")
-      )
-    );
-    setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    setLoading(false);
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "studentHistory", currentUser.uid, "entries"),
+          orderBy("timestamp", "desc")
+        )
+      );
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (docs.length > 0) {
+        setEntries(docs);
+      } else {
+        setEntries(getLocalHistory("student", currentUser.uid));
+      }
+    } catch (err) {
+      console.warn("Using localStore for StudentHistory:", err.message);
+      setEntries(getLocalHistory("student", currentUser.uid));
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filtered = filter === "all" ? entries : entries.filter((e) => e.action === filter);

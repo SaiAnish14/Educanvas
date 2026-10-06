@@ -4,6 +4,7 @@ import { Eye, RotateCcw, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
 import { logTeacherAction } from "../../hooks/useFirestore";
+import { getLocalHistory } from "../../utils/localStore";
 import CurriculumAccordion from "../shared/CurriculumAccordion";
 
 const actionColors = {
@@ -29,14 +30,25 @@ export default function TeacherHistory() {
 
   async function loadHistory() {
     setLoading(true);
-    const snap = await getDocs(
-      query(
-        collection(db, "teacherHistory", currentUser.uid, "entries"),
-        orderBy("timestamp", "desc")
-      )
-    );
-    setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    setLoading(false);
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "teacherHistory", currentUser.uid, "entries"),
+          orderBy("timestamp", "desc")
+        )
+      );
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (docs.length > 0) {
+        setEntries(docs);
+      } else {
+        setEntries(getLocalHistory("teacher", currentUser.uid));
+      }
+    } catch (err) {
+      console.warn("Using localStore for TeacherHistory:", err.message);
+      setEntries(getLocalHistory("teacher", currentUser.uid));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleRestore(entry) {

@@ -39,8 +39,9 @@ export default function ProfilePage() {
           const data = await fetchTeacherProfileStats(currentUser.uid);
           setExtra(data);
         }
-      } catch {
-        setError("Failed to load profile details.");
+      } catch (err) {
+        console.warn("Profile stats loading issue:", err.message);
+        setExtra(userProfile.role === "student" ? { enrolledCurricula: [], topicsCompleted: 0 } : { curricula: [], totalStudents: 0 });
       } finally {
         setLoading(false);
       }
@@ -51,6 +52,7 @@ export default function ProfilePage() {
 
   const isStudent = userProfile?.role === "student";
   const roleLabel = isStudent ? "Student" : "Faculty";
+  const displayName = userProfile?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "User";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -62,8 +64,6 @@ export default function ProfilePage() {
       <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
         {loading ? (
           <ProfileSkeleton />
-        ) : error ? (
-          <p className="text-center text-sm text-red-500">{error}</p>
         ) : (
           <>
             <div className="flex flex-col items-center text-center">

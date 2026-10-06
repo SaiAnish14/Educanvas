@@ -4,6 +4,7 @@ import { collection, getDocs, query, where, doc, getDoc } from "firebase/firesto
 import { BookOpen, GraduationCap, FileText } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
+import { getLocalCurricula, getLocalEnrollmentList } from "../../utils/localStore";
 
 export default function TeacherDashboard() {
   const { currentUser, userProfile } = useAuth();
@@ -59,6 +60,16 @@ export default function TeacherDashboard() {
         setRecentEnrollments(allEnrollments.slice(0, 5));
       } catch (err) {
         console.warn("Could not load teacher dashboard stats from Firestore:", err.message);
+        const localCurricula = getLocalCurricula({ teacherId: currentUser.uid, isPublished: true });
+        let totalEnrolled = 0;
+        localCurricula.forEach((c) => {
+          totalEnrolled += getLocalEnrollmentList(c.id).length;
+        });
+        setStats({
+          curriculaCount: localCurricula.length,
+          enrolledStudents: totalEnrolled,
+          resourcesCount: localCurricula.length,
+        });
       } finally {
         setLoading(false);
       }

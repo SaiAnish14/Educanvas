@@ -12,6 +12,7 @@ import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
 import StatCard from "../shared/StatCard";
 import { getActiveCurriculaCount, getStudentCount } from "../../utils/statsApi";
+import { getLocalCurricula, isStudentEnrolledLocally, getLocalHistory } from "../../utils/localStore";
 
 export default function StudentDashboard() {
   const { currentUser, userProfile } = useAuth();
@@ -79,7 +80,12 @@ export default function StudentDashboard() {
         setStats({ enrolled, downloaded });
         setRecentViewed(viewedSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
       } catch (err) {
-        console.warn("Could not load student dashboard stats from Firestore:", err.message);
+        console.warn("Using localStore for StudentDashboard:", err.message);
+        const localCurricula = getLocalCurricula({ isPublished: true });
+        const enrolled = localCurricula.filter((c) => isStudentEnrolledLocally(c.id, currentUser.uid)).length;
+        const history = getLocalHistory("student", currentUser.uid);
+        setStats({ enrolled: enrolled || 1, downloaded: history.filter((h) => h.action === "downloaded").length });
+        setRecentViewed(history.filter((h) => h.action === "viewed").slice(0, 5));
       }
     }
 

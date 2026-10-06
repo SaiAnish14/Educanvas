@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext";
 import { db } from "../../firebase/config";
 import { downloadCurriculumPDF } from "../../utils/generatePDF";
 import { logTeacherAction } from "../../hooks/useFirestore";
+import { getLocalCurricula, updateLocalCurriculum, getLocalEnrollmentList } from "../../utils/localStore";
 import StudentProgressPanel from "./StudentProgressPanel";
 
 export default function PostedCurricula() {
@@ -21,31 +22,52 @@ export default function PostedCurricula() {
 
   async function loadCurricula() {
     setLoading(true);
-    const snap = await getDocs(
-      query(
-        collection(db, "curricula"),
-        where("teacherId", "==", currentUser.uid),
-        where("isPublished", "==", true)
-      )
-    );
+    try {
+      const snap = await getDocs(
+        query(
+          collection(db, "curricula"),
+          where("teacherId", "==", currentUser.uid),
+          where("isPublished", "==", true)
+        )
+      );
 
-    const items = await Promise.all(
-      snap.docs.map(async (d) => {
-        const data = { id: d.id, ...d.data() };
-        const enrollSnap = await getDocs(
-          collection(db, "enrollments", d.id, "students")
-        );
-        return { ...data, enrollmentCount: enrollSnap.size };
-      })
-    );
+      const items = await Promise.all(
+        snap.docs.map(async (d) => {
+          const data = { id: d.id, ...d.data() };
+          let enrollmentCount = 0;
+          try {
+            const enrollSnap = await getDocs(
+              collection(db, "enrollments", d.id, "students")
+            );
+            enrollmentCount = enrollSnap.size;
+          } catch {
+            enrollmentCount = getLocalEnrollmentList(d.id).length;
+          }
+          return { ...data, enrollmentCount };
+        })
+      );
 
-    setCurricula(items);
-    setLoading(false);
+      if (items.length > 0) {
+        setCurricula(items);
+      } else {
+        const localItems = getLocalCurricula({ teacherId: currentUser.uid, isPublished: true });
+        setCurricula(localItems.map(c => ({ ...c, enrollmentCount: getLocalEnrollmentList(c.id).length })));
+      }
+    } catch (err) {
+      console.warn("Could not load from Firestore, using localStore for PostedCurricula:", err.message);
+      const localItems = getLocalCurricula({ teacherId: currentUser.uid, isPublished: true });
+      setCurricula(localItems.map(c => ({ ...c, enrollmentCount: getLocalEnrollmentList(c.id).length })));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(curriculum) {
     if (!confirm(`Unpublish "${curriculum.title}"?`)) return;
-    await updateDoc(doc(db, "curricula", curriculum.id), { isPublished: false });
+    updateLocalCurriculum(curriculum.id, { isPublished: false });
+    try {
+      await updateDoc(doc(db, "curricula", curriculum.id), { isPublished: false });
+    } catch {}
     await logTeacherAction(
       currentUser.uid,
       "deleted",

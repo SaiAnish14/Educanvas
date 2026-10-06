@@ -12,6 +12,12 @@ import {
   makeTopicId,
   markTopicComplete,
 } from "../../utils/topicCompletions";
+import {
+  getLocalCurriculumById,
+  saveLocalEnrollment,
+  isStudentEnrolledLocally,
+  getLocalTopicCompletions,
+} from "../../utils/localStore";
 import CurriculumAccordion from "../shared/CurriculumAccordion";
 
 export default function CurriculumDetail() {
@@ -30,18 +36,38 @@ export default function CurriculumDetail() {
 
   async function loadCurriculum() {
     setLoading(true);
-    const snap = await getDoc(doc(db, "curricula", id));
-    if (snap.exists()) {
-      const data = { id: snap.id, ...snap.data() };
+    let data = null;
+    try {
+      const snap = await getDoc(doc(db, "curricula", id));
+      if (snap.exists()) {
+        data = { id: snap.id, ...snap.data() };
+      }
+    } catch {}
+
+    if (!data) {
+      data = getLocalCurriculumById(id);
+    }
+
+    if (data) {
       setCurriculum(data);
 
-      const enrollSnap = await getDoc(
-        doc(db, "enrollments", id, "students", currentUser.uid)
-      );
-      setEnrolled(enrollSnap.exists());
+      let isEnrolled = false;
+      try {
+        const enrollSnap = await getDoc(
+          doc(db, "enrollments", id, "students", currentUser.uid)
+        );
+        isEnrolled = enrollSnap.exists();
+      } catch {
+        isEnrolled = isStudentEnrolledLocally(id, currentUser.uid);
+      }
+      setEnrolled(isEnrolled);
 
-      const saved = await fetchStudentCompletions(currentUser.uid, id);
-      setCompletions(saved);
+      try {
+        const saved = await fetchStudentCompletions(currentUser.uid, id);
+        setCompletions(saved);
+      } catch {
+        setCompletions(getLocalTopicCompletions(currentUser.uid, id));
+      }
 
       await logStudentAction(currentUser.uid, "viewed", id, data.title);
     }
@@ -49,8 +75,11 @@ export default function CurriculumDetail() {
   }
 
   async function handleEnroll() {
-    await setDoc(doc(db, "enrollments", id, "students", currentUser.uid), { enrolled: true });
-    await logStudentAction(currentUser.uid, "enrolled", id, curriculum.title);
+    saveLocalEnrollment(id, currentUser.uid, userProfile || {});
+    try {
+      await setDoc(doc(db, "enrollments", id, "students", currentUser.uid), { enrolled: true });
+    } catch {}
+    await logStudentAction(currentUser.uid, "enrolled", id, curriculum?.title || "Curriculum");
     invalidateChatCurriculumContext();
     setEnrolled(true);
   }
