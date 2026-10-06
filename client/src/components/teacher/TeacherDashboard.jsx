@@ -19,42 +19,49 @@ export default function TeacherDashboard() {
     if (!currentUser) return;
 
     async function load() {
-      const curriculaSnap = await getDocs(
-        query(
-          collection(db, "curricula"),
-          where("teacherId", "==", currentUser.uid),
-          where("isPublished", "==", true)
-        )
-      );
-
-      const curricula = curriculaSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      let totalEnrolled = 0;
-      const allEnrollments = [];
-
-      for (const c of curricula) {
-        const enrollSnap = await getDocs(
-          collection(db, "enrollments", c.id, "students")
+      try {
+        const curriculaSnap = await getDocs(
+          query(
+            collection(db, "curricula"),
+            where("teacherId", "==", currentUser.uid),
+            where("isPublished", "==", true)
+          )
         );
-        totalEnrolled += enrollSnap.size;
 
-        for (const enrollDoc of enrollSnap.docs) {
-          const userSnap = await getDoc(doc(db, "users", enrollDoc.id));
-          const profile = userSnap.exists() ? userSnap.data() : {};
-          allEnrollments.push({
-            id: enrollDoc.id,
-            curriculumTitle: c.title,
-            studentName: profile.name || "Student",
-          });
+        const curricula = curriculaSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        let totalEnrolled = 0;
+        const allEnrollments = [];
+
+        for (const c of curricula) {
+          const enrollSnap = await getDocs(
+            collection(db, "enrollments", c.id, "students")
+          );
+          totalEnrolled += enrollSnap.size;
+
+          for (const enrollDoc of enrollSnap.docs) {
+            try {
+              const userSnap = await getDoc(doc(db, "users", enrollDoc.id));
+              const profile = userSnap.exists() ? userSnap.data() : {};
+              allEnrollments.push({
+                id: enrollDoc.id,
+                curriculumTitle: c.title,
+                studentName: profile.name || "Student",
+              });
+            } catch {}
+          }
         }
-      }
 
-      setStats({
-        curriculaCount: curricula.length,
-        enrolledStudents: totalEnrolled,
-        resourcesCount: curricula.length,
-      });
-      setRecentEnrollments(allEnrollments.slice(0, 5));
-      setLoading(false);
+        setStats({
+          curriculaCount: curricula.length,
+          enrolledStudents: totalEnrolled,
+          resourcesCount: curricula.length,
+        });
+        setRecentEnrollments(allEnrollments.slice(0, 5));
+      } catch (err) {
+        console.warn("Could not load teacher dashboard stats from Firestore:", err.message);
+      } finally {
+        setLoading(false);
+      }
     }
 
     load();

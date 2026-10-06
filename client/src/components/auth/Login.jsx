@@ -7,6 +7,7 @@ import AuthNavbar from "./AuthNavbar";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("teacher");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -17,10 +18,15 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const { profile } = await login(email, password);
-      navigate(profile?.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
+      const { profile } = await login(email, password, role);
+      const targetRole = profile?.role || role;
+      navigate(targetRole === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
     } catch (err) {
-      setError(err.message || "Failed to login");
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
+        setError("Invalid email or password. Please verify your credentials or register a new account.");
+      } else {
+        setError(err.message || "Failed to login");
+      }
     } finally {
       setLoading(false);
     }
@@ -43,6 +49,31 @@ export default function Login() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="flex rounded-lg bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setRole("teacher")}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
+                    role === "teacher"
+                      ? "bg-white text-brand shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Faculty / Teacher
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("student")}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
+                    role === "student"
+                      ? "bg-white text-brand shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Student
+                </button>
+              </div>
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
                 <input

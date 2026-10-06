@@ -39,42 +39,48 @@ export default function StudentDashboard() {
     if (!currentUser || !userProfile) return;
 
     async function load() {
-      const curriculaSnap = await getDocs(
-        query(
-          collection(db, "curricula"),
-          where("college", "==", userProfile.college),
-          where("isPublished", "==", true)
-        )
-      );
-
-      let enrolled = 0;
-      for (const c of curriculaSnap.docs) {
-        const enrollDoc = await getDoc(
-          doc(db, "enrollments", c.id, "students", currentUser.uid)
+      try {
+        const curriculaSnap = await getDocs(
+          query(
+            collection(db, "curricula"),
+            where("college", "==", userProfile.college),
+            where("isPublished", "==", true)
+          )
         );
-        if (enrollDoc.exists()) enrolled++;
+
+        let enrolled = 0;
+        for (const c of curriculaSnap.docs) {
+          try {
+            const enrollDoc = await getDoc(
+              doc(db, "enrollments", c.id, "students", currentUser.uid)
+            );
+            if (enrollDoc.exists()) enrolled++;
+          } catch {}
+        }
+
+        const historySnap = await getDocs(
+          query(
+            collection(db, "studentHistory", currentUser.uid, "entries"),
+            orderBy("timestamp", "desc")
+          )
+        );
+        const history = historySnap.docs.map((d) => d.data());
+        const downloaded = history.filter((h) => h.action === "downloaded").length;
+
+        const viewedSnap = await getDocs(
+          query(
+            collection(db, "studentHistory", currentUser.uid, "entries"),
+            where("action", "==", "viewed"),
+            orderBy("timestamp", "desc"),
+            limit(5)
+          )
+        );
+
+        setStats({ enrolled, downloaded });
+        setRecentViewed(viewedSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.warn("Could not load student dashboard stats from Firestore:", err.message);
       }
-
-      const historySnap = await getDocs(
-        query(
-          collection(db, "studentHistory", currentUser.uid, "entries"),
-          orderBy("timestamp", "desc")
-        )
-      );
-      const history = historySnap.docs.map((d) => d.data());
-      const downloaded = history.filter((h) => h.action === "downloaded").length;
-
-      const viewedSnap = await getDocs(
-        query(
-          collection(db, "studentHistory", currentUser.uid, "entries"),
-          where("action", "==", "viewed"),
-          orderBy("timestamp", "desc"),
-          limit(5)
-        )
-      );
-
-      setStats({ enrolled, downloaded });
-      setRecentViewed(viewedSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
     }
 
     load();

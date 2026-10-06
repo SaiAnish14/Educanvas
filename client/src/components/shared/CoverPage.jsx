@@ -118,7 +118,13 @@ export default function CoverPage() {
       });
       navigate(form.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
     } catch (err) {
-      setError(err.message || "Failed to register");
+      if (err.code === "auth/email-already-in-use") {
+        setError("This email is already registered. Please go to Login or use another email.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password should be at least 6 characters.");
+      } else {
+        setError(err.message || "Failed to register");
+      }
     } finally {
       setLoading(false);
     }
