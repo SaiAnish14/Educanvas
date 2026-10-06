@@ -3,7 +3,18 @@ const express = require("express");
 const Groq = require("groq-sdk");
 
 const router = express.Router();
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+function getGroqClient() {
+  if (!process.env.GROQ_API_KEY) {
+    return null;
+  }
+  try {
+    return new Groq({ apiKey: process.env.GROQ_API_KEY });
+  } catch (err) {
+    console.error("Failed to initialize Groq client in chat:", err.message);
+    return null;
+  }
+}
 
 router.post("/chat", async (req, res) => {
   try {
@@ -11,6 +22,13 @@ router.post("/chat", async (req, res) => {
 
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
+    }
+
+    const groq = getGroqClient();
+    if (!groq) {
+      return res.json({
+        reply: `Hello! I am your EduCanvas Study Assistant. You asked: "${message}". In demo mode, feel free to explore your syllabus and assignments. Set GROQ_API_KEY in your server environment for dynamic AI study conversations!`,
+      });
     }
 
     const curriculaBlock = curriculumContext

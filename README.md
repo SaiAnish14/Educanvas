@@ -1,5 +1,11 @@
 # 🎓 EduCanvas — GenAI Curriculum Platform
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-brightgreen?style=for-the-badge&logo=github)](https://saianish14.github.io/Educanvas/)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSaiAnish14%2FEducanvas)
+
+> 🌐 **Live URL for Resume & Portfolio:**  
+> **[https://saianish14.github.io/Educanvas/](https://saianish14.github.io/Educanvas/)**
+
 EduCanvas is a premium, AI-powered curriculum design and student access portal. It enables faculty members to generate complete, semester-wise, and college-scoped curricula in seconds using advanced Groq LLaMA models, export them instantly to PDF, and track student enrollments. Students can browse and enroll in curricula specific to their institution, track progress, and download study guides.
 
 Built with **React (Vite)**, **Tailwind CSS**, **Node.js/Express**, **Firebase Authentication**, **Cloud Firestore**, and the **Groq API**.

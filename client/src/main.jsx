@@ -6,9 +6,11 @@ import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
 import "./styles/topicCompletion.css";
 
+const basename = import.meta.env.BASE_URL || "/";
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <AuthProvider>
         <App />
       </AuthProvider>
